@@ -1,5 +1,3 @@
-// @flow strict
-
 const MAX_SUGGESTIONS = 5;
 
 /**
@@ -24,7 +22,7 @@ export default function didYouMean(firstArg, secondArg) {
     message += subMessage + ' ';
   }
 
-  const suggestions = suggestionsArg.map(x => `"${x}"`);
+  const suggestions = suggestionsArg.map((x) => `"${x}"`);
   switch (suggestions.length) {
     case 0:
       return '';

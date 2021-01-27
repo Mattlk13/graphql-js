@@ -1,31 +1,31 @@
-// @flow strict
-
+// eslint-disable-next-line import/no-nodejs-modules
 import { inspect as nodeInspect } from 'util';
 
 import { expect } from 'chai';
 import { describe, it } from 'mocha';
 
-import dedent from '../../jsutils/dedent';
+import dedent from '../../__testUtils__/dedent';
+
 import inspect from '../../jsutils/inspect';
 
 import { GraphQLError } from '../../error/GraphQLError';
 
 import { Source } from '../source';
 import { TokenKind } from '../tokenKind';
-import { createLexer, isPunctuatorTokenKind } from '../lexer';
+import { Lexer, isPunctuatorTokenKind } from '../lexer';
 
-function lexOne(str) {
-  const lexer = createLexer(new Source(str));
+function lexOne(str: string) {
+  const lexer = new Lexer(new Source(str));
   return lexer.advance();
 }
 
-function lexSecond(str) {
-  const lexer = createLexer(new Source(str));
+function lexSecond(str: string) {
+  const lexer = new Lexer(new Source(str));
   lexer.advance();
   return lexer.advance();
 }
 
-function expectSyntaxError(text) {
+function expectSyntaxError(text: string) {
   return expect(() => lexSecond(text)).to.throw();
 }
 
@@ -187,7 +187,7 @@ describe('Lexer', () => {
     try {
       const str = ['', '', '     ?', ''].join('\n');
       const source = new Source(str, 'foo.js', { line: 11, column: 12 });
-      createLexer(source).advance();
+      new Lexer(source).advance();
     } catch (error) {
       caughtError = error;
     }
@@ -206,7 +206,7 @@ describe('Lexer', () => {
     let caughtError;
     try {
       const source = new Source('?', 'foo.js', { line: 1, column: 5 });
-      createLexer(source).advance();
+      new Lexer(source).advance();
     } catch (error) {
       caughtError = error;
     }
@@ -384,11 +384,11 @@ describe('Lexer', () => {
       value: 'contains " quote',
     });
 
-    expect(lexOne('"""contains \\""" triplequote"""')).to.contain({
+    expect(lexOne('"""contains \\""" triple quote"""')).to.contain({
       kind: TokenKind.BLOCK_STRING,
       start: 0,
-      end: 31,
-      value: 'contains """ triplequote',
+      end: 32,
+      value: 'contains """ triple quote',
     });
 
     expect(lexOne('"""multi\nline"""')).to.contain({
@@ -847,7 +847,7 @@ describe('Lexer', () => {
 
   it('lex reports useful information for dashes in names', () => {
     const source = new Source('a-b');
-    const lexer = createLexer(source);
+    const lexer = new Lexer(source);
     const firstToken = lexer.advance();
     expect(firstToken).to.contain({
       kind: TokenKind.NAME,
@@ -872,14 +872,14 @@ describe('Lexer', () => {
       }
     `);
 
-    const lexer = createLexer(source);
+    const lexer = new Lexer(source);
     const startToken = lexer.token;
     let endToken;
     do {
       endToken = lexer.advance();
       // Lexer advances over ignored comment tokens to make writing parsers
       // easier, but will include them in the linked list result.
-      expect(endToken.kind).not.to.equal(TokenKind.COMMENT);
+      expect(endToken.kind).to.not.equal(TokenKind.COMMENT);
     } while (endToken.kind !== TokenKind.EOF);
 
     expect(startToken.prev).to.equal(null);
@@ -894,7 +894,7 @@ describe('Lexer', () => {
       tokens.push(tok);
     }
 
-    expect(tokens.map(tok => tok.kind)).to.deep.equal([
+    expect(tokens.map((tok) => tok.kind)).to.deep.equal([
       TokenKind.SOF,
       TokenKind.BRACE_L,
       TokenKind.COMMENT,
@@ -906,7 +906,7 @@ describe('Lexer', () => {
 });
 
 describe('isPunctuatorTokenKind', () => {
-  function isPunctuatorToken(text) {
+  function isPunctuatorToken(text: string) {
     return isPunctuatorTokenKind(lexOne(text).kind);
   }
 

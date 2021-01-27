@@ -1,5 +1,3 @@
-// @flow strict
-
 // Produce the GraphQL query recommended for a full schema introspection.
 // Accepts optional IntrospectionOptions.
 export { getIntrospectionQuery } from './getIntrospectionQuery';
@@ -42,17 +40,16 @@ export { introspectionFromSchema } from './introspectionFromSchema';
 export { buildClientSchema } from './buildClientSchema';
 
 // Build a GraphQLSchema from GraphQL Schema language.
-export {
-  buildASTSchema,
-  buildSchema,
-  // @deprecated: Get the description from a schema AST node and supports legacy
-  // syntax for specifying descriptions - will be removed in v16.
-  getDescription,
-} from './buildASTSchema';
+export { buildASTSchema, buildSchema } from './buildASTSchema';
 export type { BuildSchemaOptions } from './buildASTSchema';
 
 // Extends an existing GraphQLSchema from a parsed GraphQL Schema language AST.
-export { extendSchema } from './extendSchema';
+export {
+  extendSchema,
+  // @deprecated: Get the description from a schema AST node and supports legacy
+  // syntax for specifying descriptions - will be removed in v16.
+  getDescription,
+} from './extendSchema';
 
 // Sort a GraphQLSchema.
 export { lexicographicSortSchema } from './lexicographicSortSchema';
@@ -62,7 +59,7 @@ export {
   printSchema,
   printType,
   printIntrospectionSchema,
-} from './schemaPrinter';
+} from './printSchema';
 
 // Create a GraphQLType from a GraphQL language AST.
 export { typeFromAST } from './typeFromAST';
@@ -78,7 +75,7 @@ export { astFromValue } from './astFromValue';
 
 // A helper to use within recursive-descent visitors which need to be aware of
 // the GraphQL type system.
-export { TypeInfo } from './TypeInfo';
+export { TypeInfo, visitWithTypeInfo } from './TypeInfo';
 
 // Coerces a JavaScript value to a GraphQL type, or produces errors.
 export { coerceInputValue } from './coerceInputValue';
@@ -112,5 +109,5 @@ export {
 } from './findBreakingChanges';
 export type { BreakingChange, DangerousChange } from './findBreakingChanges';
 
-// Report all deprecated usage within a GraphQL document.
+// @deprecated: Report all deprecated usage within a GraphQL document.
 export { findDeprecatedUsages } from './findDeprecatedUsages';

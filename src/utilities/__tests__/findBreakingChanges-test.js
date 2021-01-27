@@ -1,5 +1,3 @@
-// @flow strict
-
 import { expect } from 'chai';
 import { describe, it } from 'mocha';
 
@@ -7,6 +5,7 @@ import { GraphQLSchema } from '../../type/schema';
 import {
   GraphQLSkipDirective,
   GraphQLIncludeDirective,
+  GraphQLSpecifiedByDirective,
   GraphQLDeprecatedDirective,
 } from '../../type/directives';
 
@@ -592,8 +591,29 @@ describe('findBreakingChanges', () => {
 
     expect(findBreakingChanges(oldSchema, newSchema)).to.deep.equal([
       {
-        type: BreakingChangeType.INTERFACE_REMOVED_FROM_OBJECT,
+        type: BreakingChangeType.IMPLEMENTED_INTERFACE_REMOVED,
         description: 'Type1 no longer implements interface Interface1.',
+      },
+    ]);
+  });
+
+  it('should detect interfaces removed from interfaces', () => {
+    const oldSchema = buildSchema(`
+      interface Interface1
+
+      interface Interface2 implements Interface1
+    `);
+
+    const newSchema = buildSchema(`
+      interface Interface1
+
+      interface Interface2
+    `);
+
+    expect(findBreakingChanges(oldSchema, newSchema)).to.deep.equal([
+      {
+        type: BreakingChangeType.IMPLEMENTED_INTERFACE_REMOVED,
+        description: 'Interface2 no longer implements interface Interface1.',
       },
     ]);
   });
@@ -623,6 +643,8 @@ describe('findBreakingChanges', () => {
       directive @DirectiveThatRemovesArg(arg1: String) on FIELD_DEFINITION
 
       directive @NonNullDirectiveAdded on FIELD_DEFINITION
+
+      directive @DirectiveThatWasRepeatable repeatable on FIELD_DEFINITION
 
       directive @DirectiveName on FIELD_DEFINITION | QUERY
 
@@ -657,6 +679,8 @@ describe('findBreakingChanges', () => {
       directive @DirectiveThatRemovesArg on FIELD_DEFINITION
 
       directive @NonNullDirectiveAdded(arg1: Boolean!) on FIELD_DEFINITION
+
+      directive @DirectiveThatWasRepeatable on FIELD_DEFINITION
 
       directive @DirectiveName on FIELD_DEFINITION
 
@@ -704,7 +728,7 @@ describe('findBreakingChanges', () => {
           'VALUE0 was removed from enum type EnumTypeThatLosesAValue.',
       },
       {
-        type: BreakingChangeType.INTERFACE_REMOVED_FROM_OBJECT,
+        type: BreakingChangeType.IMPLEMENTED_INTERFACE_REMOVED,
         description:
           'TypeThatLooseInterface1 no longer implements interface Interface1.',
       },
@@ -741,6 +765,11 @@ describe('findBreakingChanges', () => {
           'A required arg arg1 on directive NonNullDirectiveAdded was added.',
       },
       {
+        type: BreakingChangeType.DIRECTIVE_REPEATABLE_REMOVED,
+        description:
+          'Repeatable flag was removed from DirectiveThatWasRepeatable.',
+      },
+      {
         type: BreakingChangeType.DIRECTIVE_LOCATION_REMOVED,
         description: 'QUERY was removed from DirectiveName.',
       },
@@ -769,7 +798,11 @@ describe('findBreakingChanges', () => {
     const oldSchema = new GraphQLSchema({});
 
     const newSchema = new GraphQLSchema({
-      directives: [GraphQLSkipDirective, GraphQLIncludeDirective],
+      directives: [
+        GraphQLSkipDirective,
+        GraphQLIncludeDirective,
+        GraphQLSpecifiedByDirective,
+      ],
     });
 
     expect(findBreakingChanges(oldSchema, newSchema)).to.deep.equal([
@@ -815,6 +848,23 @@ describe('findBreakingChanges', () => {
         type: BreakingChangeType.REQUIRED_DIRECTIVE_ARG_ADDED,
         description:
           'A required arg newRequiredArg on directive DirectiveName was added.',
+      },
+    ]);
+  });
+
+  it('should detect removal of repeatable flag', () => {
+    const oldSchema = buildSchema(`
+      directive @DirectiveName repeatable on OBJECT
+    `);
+
+    const newSchema = buildSchema(`
+      directive @DirectiveName on OBJECT
+    `);
+
+    expect(findBreakingChanges(oldSchema, newSchema)).to.deep.equal([
+      {
+        type: BreakingChangeType.DIRECTIVE_REPEATABLE_REMOVED,
+        description: 'Repeatable flag was removed from DirectiveName.',
       },
     ]);
   });
@@ -1021,8 +1071,32 @@ describe('findDangerousChanges', () => {
 
     expect(findDangerousChanges(oldSchema, newSchema)).to.deep.equal([
       {
-        type: DangerousChangeType.INTERFACE_ADDED_TO_OBJECT,
+        type: DangerousChangeType.IMPLEMENTED_INTERFACE_ADDED,
         description: 'NewInterface added to interfaces implemented by Type1.',
+      },
+    ]);
+  });
+
+  it('should detect interfaces added to interfaces', () => {
+    const oldSchema = buildSchema(`
+      interface OldInterface
+      interface NewInterface
+
+      interface Interface1 implements OldInterface
+    `);
+
+    const newSchema = buildSchema(`
+      interface OldInterface
+      interface NewInterface
+
+      interface Interface1 implements OldInterface & NewInterface
+    `);
+
+    expect(findDangerousChanges(oldSchema, newSchema)).to.deep.equal([
+      {
+        type: DangerousChangeType.IMPLEMENTED_INTERFACE_ADDED,
+        description:
+          'NewInterface added to interfaces implemented by Interface1.',
       },
     ]);
   });
@@ -1121,7 +1195,7 @@ describe('findDangerousChanges', () => {
           'Type1.field1 arg argThatChangesDefaultValue has changed defaultValue from "test" to "Test".',
       },
       {
-        type: DangerousChangeType.INTERFACE_ADDED_TO_OBJECT,
+        type: DangerousChangeType.IMPLEMENTED_INTERFACE_ADDED,
         description:
           'Interface1 added to interfaces implemented by TypeThatGainsInterface1.',
       },

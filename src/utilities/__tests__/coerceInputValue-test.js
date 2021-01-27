@@ -1,10 +1,9 @@
-// @flow strict
-
 import { expect } from 'chai';
 import { describe, it } from 'mocha';
 
 import invariant from '../../jsutils/invariant';
 
+import type { GraphQLInputType } from '../../type/definition';
 import { GraphQLInt } from '../../type/scalars';
 import {
   GraphQLList,
@@ -16,25 +15,27 @@ import {
 
 import { coerceInputValue } from '../coerceInputValue';
 
-function expectValue(result) {
+function expectValue(result: any) {
   expect(result.errors).to.deep.equal([]);
   return expect(result.value);
 }
 
-function expectErrors(result) {
+function expectErrors(result: any) {
   return expect(result.errors);
 }
 
 describe('coerceInputValue', () => {
-  function coerceValue(inputValue, type) {
+  function coerceValue(inputValue: mixed, type: GraphQLInputType) {
     const errors = [];
+    const value = coerceInputValue(
+      inputValue,
+      type,
+      (path, invalidValue, error) => {
+        errors.push({ path, value: invalidValue, error: error.message });
+      },
+    );
 
-    const value = coerceInputValue(inputValue, type, onError);
     return { errors, value };
-
-    function onError(path, invalidValue, error) {
-      errors.push({ path, value: invalidValue, error: error.message });
-    }
   }
 
   describe('for GraphQLNonNull', () => {
@@ -140,7 +141,8 @@ describe('coerceInputValue', () => {
       const result = coerceValue('foo', TestEnum);
       expectErrors(result).to.deep.equal([
         {
-          error: 'Expected type "TestEnum". Did you mean the enum value "FOO"?',
+          error:
+            'Value "foo" does not exist in "TestEnum" enum. Did you mean the enum value "FOO"?',
           path: [],
           value: 'foo',
         },
@@ -151,7 +153,7 @@ describe('coerceInputValue', () => {
       const result1 = coerceValue(123, TestEnum);
       expectErrors(result1).to.deep.equal([
         {
-          error: 'Expected type "TestEnum".',
+          error: 'Enum "TestEnum" cannot represent non-string value: 123.',
           path: [],
           value: 123,
         },
@@ -160,7 +162,8 @@ describe('coerceInputValue', () => {
       const result2 = coerceValue({ field: 'value' }, TestEnum);
       expectErrors(result2).to.deep.equal([
         {
-          error: 'Expected type "TestEnum".',
+          error:
+            'Enum "TestEnum" cannot represent non-string value: { field: "value" }.',
           path: [],
           value: { field: 'value' },
         },
@@ -172,7 +175,7 @@ describe('coerceInputValue', () => {
     const TestInputObject = new GraphQLInputObjectType({
       name: 'TestInputObject',
       fields: {
-        foo: { type: GraphQLNonNull(GraphQLInt) },
+        foo: { type: new GraphQLNonNull(GraphQLInt) },
         bar: { type: GraphQLInt },
       },
     });
@@ -260,7 +263,7 @@ describe('coerceInputValue', () => {
   });
 
   describe('for GraphQLInputObject with default value', () => {
-    const TestInputObject = defaultValue =>
+    const makeTestInputObject = (defaultValue) =>
       new GraphQLInputObjectType({
         name: 'TestInputObject',
         fields: {
@@ -272,33 +275,42 @@ describe('coerceInputValue', () => {
       });
 
     it('returns no errors for valid input value', () => {
-      const result = coerceValue({ foo: 5 }, TestInputObject(7));
+      const result = coerceValue({ foo: 5 }, makeTestInputObject(7));
       expectValue(result).to.deep.equal({ foo: 5 });
     });
 
     it('returns object with default value', () => {
-      const result = coerceValue({}, TestInputObject(7));
+      const result = coerceValue({}, makeTestInputObject(7));
       expectValue(result).to.deep.equal({ foo: 7 });
     });
 
     it('returns null as value', () => {
-      const result = coerceValue({}, TestInputObject(null));
+      const result = coerceValue({}, makeTestInputObject(null));
       expectValue(result).to.deep.equal({ foo: null });
     });
 
     it('returns NaN as value', () => {
-      const result = coerceValue({}, TestInputObject(NaN));
-      expectValue(result)
-        .to.have.property('foo')
-        .that.satisfy(Number.isNaN);
+      const result = coerceValue({}, makeTestInputObject(NaN));
+      expectValue(result).to.have.property('foo').that.satisfy(Number.isNaN);
     });
   });
 
   describe('for GraphQLList', () => {
-    const TestList = GraphQLList(GraphQLInt);
+    const TestList = new GraphQLList(GraphQLInt);
 
     it('returns no error for a valid input', () => {
       const result = coerceValue([1, 2, 3], TestList);
+      expectValue(result).to.deep.equal([1, 2, 3]);
+    });
+
+    it('returns no error for a valid iterable input', () => {
+      function* listGenerator() {
+        yield 1;
+        yield 2;
+        yield 3;
+      }
+
+      const result = coerceValue(listGenerator(), TestList);
       expectValue(result).to.deep.equal([1, 2, 3]);
     });
 
@@ -341,7 +353,7 @@ describe('coerceInputValue', () => {
   });
 
   describe('for nested GraphQLList', () => {
-    const TestNestedList = GraphQLList(GraphQLList(GraphQLInt));
+    const TestNestedList = new GraphQLList(new GraphQLList(GraphQLInt));
 
     it('returns no error for a valid input', () => {
       const result = coerceValue([[1], [2, 3]], TestNestedList);
@@ -371,16 +383,21 @@ describe('coerceInputValue', () => {
 
   describe('with default onError', () => {
     it('throw error without path', () => {
-      expect(() => coerceInputValue(null, GraphQLNonNull(GraphQLInt))).to.throw(
+      expect(() =>
+        coerceInputValue(null, new GraphQLNonNull(GraphQLInt)),
+      ).to.throw(
         'Invalid value null: Expected non-nullable type "Int!" not to be null.',
       );
     });
 
     it('throw error with path', () => {
       expect(() =>
-        coerceInputValue([null], GraphQLList(GraphQLNonNull(GraphQLInt))),
+        coerceInputValue(
+          [null],
+          new GraphQLList(new GraphQLNonNull(GraphQLInt)),
+        ),
       ).to.throw(
-        'Invalid value null at "value[0]": : Expected non-nullable type "Int!" not to be null.',
+        'Invalid value null at "value[0]": Expected non-nullable type "Int!" not to be null.',
       );
     });
   });

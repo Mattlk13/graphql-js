@@ -1,32 +1,24 @@
-// @flow strict
-
 import objectEntries from '../polyfills/objectEntries';
+import { SYMBOL_TO_STRING_TAG } from '../polyfills/symbols';
 
+import type { ReadOnlyObjMap, ReadOnlyObjMapLike } from '../jsutils/ObjMap';
 import inspect from '../jsutils/inspect';
 import toObjMap from '../jsutils/toObjMap';
 import devAssert from '../jsutils/devAssert';
 import instanceOf from '../jsutils/instanceOf';
-import defineToJSON from '../jsutils/defineToJSON';
 import isObjectLike from '../jsutils/isObjectLike';
-import defineToStringTag from '../jsutils/defineToStringTag';
-import {
-  type ReadOnlyObjMap,
-  type ReadOnlyObjMapLike,
-} from '../jsutils/ObjMap';
+import defineInspect from '../jsutils/defineInspect';
 
-import { type DirectiveDefinitionNode } from '../language/ast';
-import {
-  DirectiveLocation,
-  type DirectiveLocationEnum,
-} from '../language/directiveLocation';
+import type { DirectiveDefinitionNode } from '../language/ast';
+import type { DirectiveLocationEnum } from '../language/directiveLocation';
+import { DirectiveLocation } from '../language/directiveLocation';
 
-import { GraphQLString, GraphQLBoolean } from './scalars';
-import {
-  type GraphQLFieldConfigArgumentMap,
-  type GraphQLArgument,
-  argsToArgsConfig,
-  GraphQLNonNull,
+import type {
+  GraphQLArgument,
+  GraphQLFieldConfigArgumentMap,
 } from './definition';
+import { GraphQLString, GraphQLBoolean } from './scalars';
+import { argsToArgsConfig, GraphQLNonNull } from './definition';
 
 /**
  * Test if the given value is a GraphQL directive.
@@ -61,11 +53,11 @@ export class GraphQLDirective {
   extensions: ?ReadOnlyObjMap<mixed>;
   astNode: ?DirectiveDefinitionNode;
 
-  constructor(config: GraphQLDirectiveConfig): void {
+  constructor(config: $ReadOnly<GraphQLDirectiveConfig>) {
     this.name = config.name;
     this.description = config.description;
     this.locations = config.locations;
-    this.isRepeatable = config.isRepeatable != null && config.isRepeatable;
+    this.isRepeatable = config.isRepeatable ?? false;
     this.extensions = config.extensions && toObjMap(config.extensions);
     this.astNode = config.astNode;
 
@@ -75,7 +67,7 @@ export class GraphQLDirective {
       `@${config.name} locations must be an Array.`,
     );
 
-    const args = config.args || {};
+    const args = config.args ?? {};
     devAssert(
       isObjectLike(args) && !Array.isArray(args),
       `@${config.name} args must be an object with argument names as keys.`,
@@ -86,17 +78,13 @@ export class GraphQLDirective {
       description: argConfig.description,
       type: argConfig.type,
       defaultValue: argConfig.defaultValue,
+      deprecationReason: argConfig.deprecationReason,
       extensions: argConfig.extensions && toObjMap(argConfig.extensions),
       astNode: argConfig.astNode,
     }));
   }
 
-  toConfig(): {|
-    ...GraphQLDirectiveConfig,
-    args: GraphQLFieldConfigArgumentMap,
-    isRepeatable: boolean,
-    extensions: ?ReadOnlyObjMap<mixed>,
-  |} {
+  toConfig(): GraphQLDirectiveNormalizedConfig {
     return {
       name: this.name,
       description: this.description,
@@ -111,11 +99,19 @@ export class GraphQLDirective {
   toString(): string {
     return '@' + this.name;
   }
+
+  toJSON(): string {
+    return this.toString();
+  }
+
+  // $FlowFixMe[unsupported-syntax] Flow doesn't support computed properties yet
+  get [SYMBOL_TO_STRING_TAG]() {
+    return 'GraphQLDirective';
+  }
 }
 
-// Conditionally apply `[Symbol.toStringTag]` if `Symbol`s are supported
-defineToStringTag(GraphQLDirective);
-defineToJSON(GraphQLDirective);
+// Print a simplified form when appearing in `inspect` and `util.inspect`.
+defineInspect(GraphQLDirective);
 
 export type GraphQLDirectiveConfig = {|
   name: string,
@@ -125,6 +121,13 @@ export type GraphQLDirectiveConfig = {|
   isRepeatable?: ?boolean,
   extensions?: ?ReadOnlyObjMapLike<mixed>,
   astNode?: ?DirectiveDefinitionNode,
+|};
+
+type GraphQLDirectiveNormalizedConfig = {|
+  ...GraphQLDirectiveConfig,
+  args: GraphQLFieldConfigArgumentMap,
+  isRepeatable: boolean,
+  extensions: ?ReadOnlyObjMap<mixed>,
 |};
 
 /**
@@ -141,7 +144,7 @@ export const GraphQLIncludeDirective = new GraphQLDirective({
   ],
   args: {
     if: {
-      type: GraphQLNonNull(GraphQLBoolean),
+      type: new GraphQLNonNull(GraphQLBoolean),
       description: 'Included when true.',
     },
   },
@@ -161,7 +164,7 @@ export const GraphQLSkipDirective = new GraphQLDirective({
   ],
   args: {
     if: {
-      type: GraphQLNonNull(GraphQLBoolean),
+      type: new GraphQLNonNull(GraphQLBoolean),
       description: 'Skipped when true.',
     },
   },
@@ -178,13 +181,33 @@ export const DEFAULT_DEPRECATION_REASON = 'No longer supported';
 export const GraphQLDeprecatedDirective = new GraphQLDirective({
   name: 'deprecated',
   description: 'Marks an element of a GraphQL schema as no longer supported.',
-  locations: [DirectiveLocation.FIELD_DEFINITION, DirectiveLocation.ENUM_VALUE],
+  locations: [
+    DirectiveLocation.FIELD_DEFINITION,
+    DirectiveLocation.ARGUMENT_DEFINITION,
+    DirectiveLocation.INPUT_FIELD_DEFINITION,
+    DirectiveLocation.ENUM_VALUE,
+  ],
   args: {
     reason: {
       type: GraphQLString,
       description:
-        'Explains why this element was deprecated, usually also including a suggestion for how to access supported similar data. Formatted using the Markdown syntax (as specified by [CommonMark](https://commonmark.org/).',
+        'Explains why this element was deprecated, usually also including a suggestion for how to access supported similar data. Formatted using the Markdown syntax, as specified by [CommonMark](https://commonmark.org/).',
       defaultValue: DEFAULT_DEPRECATION_REASON,
+    },
+  },
+});
+
+/**
+ * Used to provide a URL for specifying the behaviour of custom scalar definitions.
+ */
+export const GraphQLSpecifiedByDirective = new GraphQLDirective({
+  name: 'specifiedBy',
+  description: 'Exposes a URL that specifies the behaviour of this scalar.',
+  locations: [DirectiveLocation.SCALAR],
+  args: {
+    url: {
+      type: new GraphQLNonNull(GraphQLString),
+      description: 'The URL that specifies the behaviour of this scalar.',
     },
   },
 });
@@ -196,6 +219,7 @@ export const specifiedDirectives = Object.freeze([
   GraphQLIncludeDirective,
   GraphQLSkipDirective,
   GraphQLDeprecatedDirective,
+  GraphQLSpecifiedByDirective,
 ]);
 
 export function isSpecifiedDirective(
